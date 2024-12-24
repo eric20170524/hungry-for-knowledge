@@ -1,9 +1,11 @@
+# -*- coding:utf-8 -*-
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 from io import BytesIO
 import requests
+from libExcel import read_excel
 
 app = FastAPI()
 
@@ -21,28 +23,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenRouter API Key
-OPENROUTE_API_KEY = 'your_openroute_api_key'
-
 
 class OpenRouterRequest(BaseModel):
     system_prompt: str
     user_prompt: str
 
 
-def read_excel(file_bytes, file_type):
-    df = pd.read_excel(BytesIO(file_bytes), engine='openpyxl' if file_type == 'xlsx' else 'xlrd')
-    return df.to_dict()
-
 
 @app.post("/openrouter")
-async def openrouter_endpoint(request: OpenRouterRequest):
+async def openrouter_query(request: OpenRouterRequest):
     payload = {
+        "model": "gpt-4o-mini",
         "prompt": [
             {"role": "system", "content": request.system_prompt},
             {"role": "user", "content": request.user_prompt}
         ],
-        "max_tokens": 50
+        "max_tokens": 1024
     }
 
     headers = {
@@ -67,9 +63,7 @@ async def openrouter_endpoint(request: OpenRouterRequest):
 async def chat_endpoint(message: str = Form(None), file: UploadFile = File(None)):
     reply = ""
     if message:
-        system_prompt = "You are a helpful assistant."
-        user_prompt = message
-        # openrouter_response = await openrouter_endpoint(
+        # openrouter_response = await openrouter_query(
         #     OpenRouterRequest(system_prompt=system_prompt, user_prompt=user_prompt))
         # reply += f"Bot: {openrouter_response['reply']}"
         reply += f"Bot: {message}"
@@ -77,7 +71,9 @@ async def chat_endpoint(message: str = Form(None), file: UploadFile = File(None)
         file_extension = file.filename.split('.')[-1]
         if file_extension in ['xlsx', 'xls']:
             file_bytes = await file.read()
-            data = read_excel(file_bytes, file_extension)
+            data = read_excel(BytesIO(file_bytes))
+            system_prompt = "You are a helpful assistant."
+            user_prompt = message
             reply += f" and uploaded {file_extension} file '{file.filename}' with content: {data}"
         else:
             raise HTTPException(status_code=400, detail="Invalid file type. Only .xlsx and .xls files are allowed.")

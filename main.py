@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 import gradio as gr
 import requests
 import threading
